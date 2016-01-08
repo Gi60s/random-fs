@@ -4,7 +4,7 @@
   "description": "Create a random directory structure with files and folders.",
   "main": "index.js",
   "bin": {
-    "random-fs": "cli.js"
+    "random-fs": "bin/cli.js"
   },
   "dependencies": {
     "bluebird": "^3.1.1",

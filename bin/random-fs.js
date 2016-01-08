@@ -8,7 +8,6 @@ var schemata        = require('object-schemata');
 
 module.exports = makeRandomFileStructure;
 
-
 var rfsSchema = schemata({
   depth: {
     description: 'The deepest number of sub-directories to create.',
@@ -54,6 +53,39 @@ function addFile(filepath, content, result) {
     .catch(function(e) {
       result.errors.push('[FILE] Could not add file: ' + filepath + '\n' + e.stack);
     });
+}
+
+function logReport(verbose) {
+  var result = this;
+
+  console.log('');
+
+  summary(result, 'added',   'Added   ');
+  summary(result, 'deleted', 'Deleted ');
+  summary(result, 'errors',  'Errors  ');
+
+  if (verbose) {
+    if (result.deleted.length > 0) console.log('\nDeleted:\n  ' + result.deleted.join('\n  '));
+    console.log('\nAdded:\n  ' + result.added.join('\n  '));
+    if (result.errors.length > 0) console.error('\nErrors:\n  ' + result.errors.join('\n  '));
+  }
+
+  console.log('');
+
+  function summary(data, key, prefix) {
+    var str = prefix + ' ';
+    str += countType(data[key], 'FILE') + ' files / ';
+    str += countType(data[key], 'DIR') + ' directories.';
+    console.log(str);
+  }
+
+  function countType(data, type) {
+    return data
+        .filter(function(log) {
+          return log.indexOf('[' + type + ']') === 0;
+        })
+        .length;
+  }
 }
 
 function makeRandomFileStructure(configuration) {
@@ -132,6 +164,7 @@ function makeRandomFileStructure(configuration) {
           result.added.sort(sortResultSet);
           result.deleted.sort(sortResultSet);
           result.errors.sort(sortResultSet);
+          result.log = logReport;
           return result;
         });
 
