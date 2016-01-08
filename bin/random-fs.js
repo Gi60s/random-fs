@@ -42,106 +42,123 @@ var rfsSchema = schemata({
 });
 
 // add a file at the specified path
-function addFile(filepath, content) {
+function addFile(filepath, content, result) {
   var dirPath = path.dirname(filepath);
-  return mkdir(dirPath)
+  return mkdir(dirPath, result)
     .then(function() {
       return fs.writeFileAsync(filepath, content, 'utf8');
     })
     .then(function() {
-      console.log('Wrote file: ' + filepath);
+      result.added.push('[FILE] ' + filepath);
     })
     .catch(function(e) {
-      console.error('Could not add file: ' + filepath + '\n' + e.stack);
+      result.errors.push('[FILE] Could not add file: ' + filepath + '\n' + e.stack);
     });
 }
 
 function makeRandomFileStructure(configuration) {
   var config = rfsSchema.normalize(configuration);
-  var promise = config.wipe ? rmdir(config.path) : Promise.resolve();
+  var promise;
+  var result = {
+    added: [],
+    deleted: [],
+    errors: []
+  };
+
+  promise = config.wipe ? rmdir(config.path, result) : Promise.resolve();
 
   return promise
     .catch(function(e) {
       if (e.code === 'ENOENT' && e.errno === -2) return;
-      console.error('Could not wipe directory: ' + config.path + '\n' + e.stack);
+      result.errors.push('[DIR]  Could not wipe directory: ' + config.path + '\n' + e.stack);
     })
     .then(function() {
-      var ar;
-      var content;
-      var depth;
-      var directories = {};
-      var dirPath;
-      var filepath;
       var i;
-      var index;
-      var j;
-      var name;
-      var promise;
       var promises = [];
 
       for (i = 0; i < config.number; i++) {
-        depth = Math.round(Math.random() * config.depth);
+        (function(){
+          var ar;
+          var content;
+          var depth;
+          var directories = {};
+          var dirPath;
+          var filepath;
+          var index;
+          var j;
+          var name;
+          var promise;
 
-        //generate the directory path
-        dirPath = [];
-        for (j = 0; j < depth; j++) {
-          if (directories.hasOwnProperty('' + j)) {
-            ar = directories['' + j];
-            index = Math.ceil(Math.random() * ar.length);
-            if (index === ar.length) {
-              name = randomName(2);
-              ar.push(name);
+          depth = Math.round(Math.random() * config.depth);
+
+          //generate the directory path
+          dirPath = [];
+          for (j = 0; j < depth; j++) {
+            if (directories.hasOwnProperty('' + j)) {
+              ar = directories['' + j];
+              index = Math.ceil(Math.random() * ar.length);
+              if (index === ar.length) {
+                name = randomName(2);
+                ar.push(name);
+              } else {
+                name = ar[index];
+              }
             } else {
-              name = ar[index];
+              name = randomName(2);
+              directories['' + j] = [name];
             }
-          } else {
-            name = randomName(2);
-            directories['' + j] = [name];
+            dirPath.push(name);
           }
-          dirPath.push(name);
-        }
-        dirPath = dirPath.join(path.sep);
+          dirPath = dirPath.join(path.sep);
 
-        //generate content
-        content = loremIpsum({
-          count: Math.round(Math.random() * 15) + 3,
-          units: 'paragraphs'
-        });
+          //generate content
+          content = loremIpsum({
+            count: Math.round(Math.random() * 15) + 3,
+            units: 'paragraphs'
+          });
 
-        //generate the file path
-        filepath = path.resolve(process.cwd(), config.path, dirPath, randomName(2)) + '.' +
-            randomString.generate({ length: Math.ceil(Math.random() * 2) + 1, charset: 'alphabetic' }).toLowerCase();
+          //generate the file path
+          filepath = path.resolve(process.cwd(), config.path, dirPath, randomName(2)) + '.' +
+              randomString.generate({ length: Math.ceil(Math.random() * 2) + 1, charset: 'alphabetic' }).toLowerCase();
 
-        //write the file
-        //console.log(filepath);
-        promise = addFile(filepath, content)
-            .catch(function(e) {
-              console.error(e.stack);
-            });
-        promises.push(promise);
+          //write the file
+          promise = addFile(filepath, content, result);
+          promises.push(promise);
+        })();
       }
 
-      return Promise.all(promises);
+      return Promise.all(promises)
+        .then(function() {
+          result.added.sort(sortResultSet);
+          result.deleted.sort(sortResultSet);
+          result.errors.sort(sortResultSet);
+          return result;
+        });
 
     });
 }
 
 // make a directory and it's sub directories
-function mkdir(filepath) {
+function mkdir(filepath, result) {
   return fs.mkdirAsync(filepath)
+    .then(function() {
+      result.added.push('[DIR]  ' + filepath);
+    })
     .catch(function(e) {
       if (e.code === 'EEXIST' && e.errno === -17) return;
       if (e.code === 'ENOENT' && e.errno === -2) {
-        return mkdir(path.dirname(filepath))
+        return mkdir(path.dirname(filepath), result)
             .then(function() {
               return fs.mkdirAsync(filepath)
             })
+            .then(function() {
+              result.added.push('[DIR]  ' + filepath);
+            })
             .catch(function(e) {
               if (e.code === 'EEXIST') return;
-              throw e;
+              result.errors.push('[DIR]  Could not make directory: ' + filepath);
             });
       }
-      console.error(e.code, e.errno);
       throw e;
     });
 }
@@ -160,7 +177,7 @@ function randomName(wordCount) {
 }
 
 // remove a directory and all of its contents
-function rmdir(filepath) {
+function rmdir(filepath, result) {
   return fs.readdirAsync(filepath)
     .then(function(filepaths) {
       var promises = [];
@@ -169,22 +186,29 @@ function rmdir(filepath) {
         var promise = fs.statAsync(absPath)
           .then(function(stat) {
             if (stat.isDirectory()) {
-              return rmdir(absPath);
+              return rmdir(absPath, result);
             } else {
-              return fs.unlinkAsync(absPath);
+              return fs.unlinkAsync(absPath)
+                .then(function() {
+                  result.deleted.push('[FILE] ' + absPath);
+                });
             }
-          })
-          .then(function() {
-            console.log('Deleted: ' + absPath);
           });
         promises.push(promise);
       });
       return Promise.all(promises)
         .then(function() {
-          return fs.rmdir(filepath);
-        })
-        .then(function() {
-          console.log('Deleted: ' + filepath);
+          return fs.rmdirAsync(filepath)
+            .then(function() {
+              result.deleted.push('[DIR]  ' + filepath);
+            })
+            .catch(function(e) {
+              result.errors.push('[DIR]  ' + 'Could not delete directory: ' + filepath);
+            });
         });
     });
+}
+
+function sortResultSet(a, b) {
+  return a.substr(7) < b.substr(7) ? -1 : 1;
 }

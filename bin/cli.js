@@ -51,32 +51,12 @@ if (!program.wipe || program.confirm) {
 
 function callRandomFs() {
     var config = {};
-}
-
-/*
-
-var absPath = path.resolve(process.cwd(), filePath);
-var rl;
-
-if (program.wipe && !program.confirm) {
-    console.log('You are about to completely remove the directory and it\'s contents for: \n' + absPath);
-    rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
+    ['depth', 'number', 'wipe'].forEach(function(name) {
+        if (program.hasOwnProperty(name)) config[name] = program.name;
     });
-    rl.question('Confirm directory wipe: (y/N)', function(answer) {
-        if (/^y/i.test(answer))
+    config.path = actionPath;
+    randomFs(config)
+        .then(function() {
 
-            console.log('Answer: ' + answer);
-        rl.close();
-    })
+        })
 }
-
-
-console.log(filePath);
-console.log(program.confirm);
-console.log(program.depth);
-console.log(program.number);
-console.log(program.wipe);
-
-*/
