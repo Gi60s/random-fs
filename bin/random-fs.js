@@ -6,7 +6,107 @@ var randomString    = require('randomstring');
 var randomWord      = require('random-word');
 var schemata        = require('object-schemata');
 
-module.exports = makeRandomFileStructure;
+/**
+ * Generate a random file structure according to the configuration.
+ * @param {object} configuration
+ * @returns {Promise}
+ */
+module.exports = function(configuration) {
+  var config = rfsSchema.normalize(configuration);
+  var promise;
+  var result = {
+    added: [],
+    deleted: [],
+    errors: []
+  };
+
+  promise = config.wipe ? rmdir(config.path, result) : Promise.resolve();
+
+  return promise
+    .catch(function(e) {
+      if (e.code === 'ENOENT' && e.errno === -2) return;
+      result.errors.push('[DIR]  Could not wipe directory: ' + config.path + '\n' + e.stack);
+    })
+    .then(function() {
+      var i;
+      var promises = [];
+
+      for (i = 0; i < config.number; i++) {
+        (function(){
+          var ar;
+          var content;
+          var depth;
+          var directories = {};
+          var dirPath;
+          var filepath;
+          var index;
+          var j;
+          var name;
+          var promise;
+
+          depth = Math.round(Math.random() * config.depth);
+
+          //generate the directory path
+          dirPath = [];
+          for (j = 0; j < depth; j++) {
+            if (directories.hasOwnProperty('' + j)) {
+              ar = directories['' + j];
+              index = Math.ceil(Math.random() * ar.length);
+              if (index === ar.length) {
+                name = randomName(2);
+                ar.push(name);
+              } else {
+                name = ar[index];
+              }
+            } else {
+              name = randomName(2);
+              directories['' + j] = [name];
+            }
+            dirPath.push(name);
+          }
+          dirPath = dirPath.join(path.sep);
+
+          //generate content
+          content = loremIpsum({
+            count: Math.round(Math.random() * 15) + 3,
+            units: 'paragraphs'
+          });
+
+          //generate the file path
+          filepath = path.resolve(process.cwd(), config.path, dirPath, randomName(2)) + '.' +
+              randomString.generate({ length: Math.ceil(Math.random() * 2) + 1, charset: 'alphabetic' }).toLowerCase();
+
+          //write the file
+          promise = addFile(filepath, content, result);
+          promises.push(promise);
+        })();
+      }
+
+      return Promise.all(promises)
+          .then(function() {
+            result.added.sort(sortResultSet);
+            result.deleted.sort(sortResultSet);
+            result.errors.sort(sortResultSet);
+            result.log = logReport;
+            return result;
+          });
+
+    });
+};
+
+module.exports.wipe = function(path) {
+  var result = {
+    added: [],
+    deleted: [],
+    errors: []
+  };
+  return rmdir(path, result)
+    .catch(function() {})
+    .then(function() {
+      return result;
+    });
+};
+
 
 var rfsSchema = schemata({
   depth: {
@@ -86,89 +186,6 @@ function logReport(verbose) {
         })
         .length;
   }
-}
-
-function makeRandomFileStructure(configuration) {
-  var config = rfsSchema.normalize(configuration);
-  var promise;
-  var result = {
-    added: [],
-    deleted: [],
-    errors: []
-  };
-
-  promise = config.wipe ? rmdir(config.path, result) : Promise.resolve();
-
-  return promise
-    .catch(function(e) {
-      if (e.code === 'ENOENT' && e.errno === -2) return;
-      result.errors.push('[DIR]  Could not wipe directory: ' + config.path + '\n' + e.stack);
-    })
-    .then(function() {
-      var i;
-      var promises = [];
-
-      for (i = 0; i < config.number; i++) {
-        (function(){
-          var ar;
-          var content;
-          var depth;
-          var directories = {};
-          var dirPath;
-          var filepath;
-          var index;
-          var j;
-          var name;
-          var promise;
-
-          depth = Math.round(Math.random() * config.depth);
-
-          //generate the directory path
-          dirPath = [];
-          for (j = 0; j < depth; j++) {
-            if (directories.hasOwnProperty('' + j)) {
-              ar = directories['' + j];
-              index = Math.ceil(Math.random() * ar.length);
-              if (index === ar.length) {
-                name = randomName(2);
-                ar.push(name);
-              } else {
-                name = ar[index];
-              }
-            } else {
-              name = randomName(2);
-              directories['' + j] = [name];
-            }
-            dirPath.push(name);
-          }
-          dirPath = dirPath.join(path.sep);
-
-          //generate content
-          content = loremIpsum({
-            count: Math.round(Math.random() * 15) + 3,
-            units: 'paragraphs'
-          });
-
-          //generate the file path
-          filepath = path.resolve(process.cwd(), config.path, dirPath, randomName(2)) + '.' +
-              randomString.generate({ length: Math.ceil(Math.random() * 2) + 1, charset: 'alphabetic' }).toLowerCase();
-
-          //write the file
-          promise = addFile(filepath, content, result);
-          promises.push(promise);
-        })();
-      }
-
-      return Promise.all(promises)
-        .then(function() {
-          result.added.sort(sortResultSet);
-          result.deleted.sort(sortResultSet);
-          result.errors.sort(sortResultSet);
-          result.log = logReport;
-          return result;
-        });
-
-    });
 }
 
 // make a directory and it's sub directories
