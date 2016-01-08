@@ -1,6 +1,6 @@
 {
   "name": "random-fs",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Create a random directory structure with files and folders.",
   "main": "index.js",
   "bin": {
